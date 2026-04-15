@@ -4,3 +4,4 @@ __pycache__/
 .playwright/
 venv/
 .venv/
+poc_kg/

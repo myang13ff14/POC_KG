@@ -23,15 +23,36 @@ async def scrape_product(page, product_id: str, category: str) -> dict:
         await compat_tab.click()
         await page.wait_for_timeout(2000)
 
-    # Compatible devices — first-column TD cells with rowspan in the compatibility table.
-    # The table has class _2-R8boYe8O05a_RJibaHeH; TDs with the rowspan attribute hold
-    # the device names (one device can map to multiple IDs, hence rowspan > 1).
-    device_els = await page.query_selector_all("table._2-R8boYe8O05a_RJibaHeH td[rowspan]")
+    # Compatible devices — iterate all rows of the compatibility table.
+    # Description cell has rowspan when one device maps to multiple machine-type IDs.
+    rows = await page.query_selector_all("table._2-R8boYe8O05a_RJibaHeH tr")
     devices = []
-    for el in device_els:
-        text = (await el.inner_text()).strip()
-        if text:
-            devices.append(text)
+    current_desc = ""
+    for row in rows:
+        cells = await row.query_selector_all("td")
+        if not cells:
+            continue
+
+        first_attr = await cells[0].get_attribute("rowspan")
+        if first_attr:
+            # First cell is the description
+            current_desc = (await cells[0].inner_text()).strip()
+            id_cell = cells[1] if len(cells) > 1 else None
+            footnote_cell = cells[2] if len(cells) > 2 else None
+        else:
+            # Continuation row — description carried over from rowspan
+            id_cell = cells[0] if len(cells) > 0 else None
+            footnote_cell = cells[1] if len(cells) > 1 else None
+
+        machine_type = (await id_cell.inner_text()).strip() if id_cell else ""
+        footnote = (await footnote_cell.inner_text()).strip() if footnote_cell else ""
+
+        if current_desc and machine_type:
+            devices.append({
+                "name": current_desc,
+                "machine_type": machine_type,
+                "footnote": footnote,
+            })
 
     return {
         "id": product_id,

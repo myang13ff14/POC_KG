@@ -1,11 +1,11 @@
 import os
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, basic_auth
 from dotenv import load_dotenv
 
 load_dotenv()
 
 URI = "bolt://localhost:7687"
-AUTH = ("neo4j", os.getenv("NEO4J_PASSWORD", "pocpassword"))
+AUTH = basic_auth("neo4j", "")
 
 
 def load_products(products: list[dict]):
@@ -35,18 +35,19 @@ def _merge_product(tx, product: dict):
         url=product["url"],
     )
 
-    # Upsert each compatible Device and create the relationship
-    for device_name in product["compatible_devices"]:
-        device_id = device_name.lower().replace(" ", "-")
+    # Upsert each compatible Device and its MachineType IDs
+    for device in product["compatible_devices"]:
         tx.run(
             """
-            MERGE (d:Device {id: $device_id})
-            SET d.name = $device_name
-            WITH d
             MATCH (p:Product {id: $product_id})
+            MERGE (d:Device {name: $name})
             MERGE (p)-[:COMPATIBLE_WITH]->(d)
+            MERGE (m:MachineType {id: $machine_type})
+            SET m.footnote = $footnote
+            MERGE (d)-[:HAS_ID]->(m)
             """,
-            device_id=device_id,
-            device_name=device_name,
             product_id=product["id"],
+            name=device["name"],
+            machine_type=device["machine_type"],
+            footnote=device["footnote"],
         )
